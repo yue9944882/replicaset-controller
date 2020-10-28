@@ -29,12 +29,12 @@ import java.util.stream.Collectors;
         watches =
         @KubernetesReconcilerWatches({
                 @KubernetesReconcilerWatch(
-                        apiTypeClass = V1Pod.class,
-                        workQueueKeyFunc = PodWorkQueueKeyFunc.class,
+                        apiTypeClass = V1Pod.class, // the reconciler needs to subscribe pod events.
+                        workQueueKeyFunc = PodWorkQueueKeyFunc.class, // mapping pod event to reconciler-request
                         resyncPeriodMillis = 60 * 1000L // resync every 60s
                 ),
                 @KubernetesReconcilerWatch(
-                        apiTypeClass = V1ReplicaSet.class,
+                        apiTypeClass = V1ReplicaSet.class,// the reconciler needs to subscribe replicaset events.
                         resyncPeriodMillis = 60 * 1000L // resync every 60s
                 )
         }))
@@ -59,31 +59,41 @@ public class ReplicaSetReconciler implements Reconciler {
         this.podInformer = podSharedInformer;
         this.rsLister = rsLister;
         this.rsInformer = rsSharedInformer;
-        this.coreV1Api = new CoreV1Api(apiClient);
+        this.coreV1Api = new CoreV1Api(apiClient); // feel lucky? try {@link io.kubernetes.client.util.generic.GenericKubernetesApi}
         this.appsV1Api = new AppsV1Api(apiClient);
     }
 
 
+    // the filter only applies for ADD event from pod.
+    // the method must be public-access.
     @AddWatchEventFilter(apiTypeClass = V1Pod.class)
     public boolean onAddFilter(V1Pod pod) {
         return Utils.getReplicaSetControllerOwnerRef(pod) != null;
     }
 
+    // the filter only applies for UPDATE event from pod.
+    // the method must be public-access.
     @UpdateWatchEventFilter(apiTypeClass = V1Pod.class)
     public boolean onUpdateFilter(V1Pod oldPod, V1Pod newPod) {
         return Utils.getReplicaSetControllerOwnerRef(newPod) != null;
     }
 
+    // the filter only applies for DELETE event from pod.
+    // the method must be public-access.
     @DeleteWatchEventFilter(apiTypeClass = V1Pod.class)
     public boolean onDeleteFilter(V1Pod pod, Boolean cacheStatusUnknown) {
         return Utils.getReplicaSetControllerOwnerRef(pod) != null;
     }
 
+    // the reconciler won't be dealing with reconciler-requests until the ready-func passes.
+    // the method must be public-access.
     @KubernetesReconcilerReadyFunc
     public boolean informerCacheReady() {
         return podInformer.hasSynced() && rsInformer.hasSynced();
     }
 
+    // see the original go code at:
+    // https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/replicaset/replica_set.go
     public Result reconcile(Request request) {
         logger.info("starting to reconcile replicaset {}", request);
 

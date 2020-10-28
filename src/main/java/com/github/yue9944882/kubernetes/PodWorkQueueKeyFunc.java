@@ -8,6 +8,7 @@ import java.util.function.Function;
 
 public class PodWorkQueueKeyFunc implements Function<KubernetesObject, Request> {
     public Request apply(KubernetesObject kubernetesObject) {
+        // Extracts owner-reference from a pod, and maps it to a reconciler request.
         if (!(kubernetesObject instanceof V1Pod)) {
             throw new RuntimeException("unexpected input type:" + kubernetesObject.getClass());
         }

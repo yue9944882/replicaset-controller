@@ -39,6 +39,9 @@ public class Utils {
     }
 
     public static V1PodCondition getPodCondition(V1Pod pod, String type) {
+        if (pod.getStatus().getConditions() == null) {
+            return null;
+        }
         return pod.getStatus().getConditions().stream()
                 .filter(cond -> {
                     return type.equals(cond.getType());
@@ -49,6 +52,9 @@ public class Utils {
     }
 
     public static V1ReplicaSetCondition getReplicaSetCondition(V1ReplicaSet rs, String type) {
+        if (rs.getStatus().getConditions() == null) {
+            return null;
+        }
         return rs.getStatus().getConditions().stream()
                 .filter(cond -> {
                     return type.equals(cond.getType());

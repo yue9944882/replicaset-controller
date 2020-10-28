@@ -1,0 +1,33 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: java-replicaset-controller
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:controller:replicaset-controller
+subjects:
+  - kind: ServiceAccount
+    namespace: default
+    name: java-replicas-controller
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: java-replicas-controller
+  namespace: default
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: java-replicaset-controller
+  labels:
+    app: java-replicaset-controller
+spec:
+  serviceAccountName: java-replicas-controller
+  containers:
+    - name: nginx
+      image: docker.io/library/replicaset-controller:1.0-SNAPSHOT
+      imagePullPolicy: IfNotPresent
