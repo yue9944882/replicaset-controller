@@ -1,23 +1,29 @@
 package com.github.yue9944882.kubernetes.config;
 
+import java.io.IOException;
+import java.util.concurrent.Executors;
+
 import com.github.yue9944882.kubernetes.ReplicaSetReconciler;
-import io.kubernetes.client.informer.SharedInformer;
+import io.kubernetes.client.extended.controller.Controller;
+import io.kubernetes.client.extended.controller.ControllerManager;
 import io.kubernetes.client.informer.SharedInformerFactory;
-import io.kubernetes.client.informer.cache.Lister;
 import io.kubernetes.client.openapi.ApiClient;
-import io.kubernetes.client.openapi.models.*;
+import io.kubernetes.client.openapi.models.V1Pod;
+import io.kubernetes.client.openapi.models.V1PodList;
+import io.kubernetes.client.openapi.models.V1ReplicaSet;
+import io.kubernetes.client.openapi.models.V1ReplicaSetList;
 import io.kubernetes.client.spring.extended.controller.annotation.GroupVersionResource;
 import io.kubernetes.client.spring.extended.controller.annotation.KubernetesInformer;
 import io.kubernetes.client.spring.extended.controller.annotation.KubernetesInformers;
+import io.kubernetes.client.spring.extended.controller.factory.KubernetesControllerFactory;
 import io.kubernetes.client.util.ClientBuilder;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 
-import java.io.IOException;
-
 @Configuration
-@ComponentScan("io.kubernetes.client.spring.extended.controller") // Loading informer/reconciler bean processors
 public class ControllerConfiguration {
 
     @Bean
@@ -33,14 +39,28 @@ public class ControllerConfiguration {
     }
 
     @Bean
-    public ReplicaSetReconciler replicaSetReconciler(
-            ApiClient apiClient,
-            Lister<V1Pod> podLister, // Automatically injected by {@link io.kubernetes.client.spring.extended.controller.KubernetesReconcilerProcessor}
-            SharedInformer<V1Pod> podSharedInformer, // ditto
-            Lister<V1ReplicaSet> rsLister, // ditto
-            SharedInformer<V1ReplicaSet> rsSharedInformer// ditto
-    ) {
-        return new ReplicaSetReconciler(apiClient, podLister, podSharedInformer, rsLister, rsSharedInformer);
+    public ReplicaSetReconciler replicaSetReconciler() {
+        return new ReplicaSetReconciler();
+    }
+
+    @Bean("replicaset-controller")
+    public KubernetesControllerFactory replicaSetController(SharedInformerFactory sharedInformerFactory, ReplicaSetReconciler rs) {
+        return new KubernetesControllerFactory(sharedInformerFactory, rs);
+    }
+
+    @Bean
+    public CommandLineRunner starter(SharedInformerFactory sharedInformerFactory, @Qualifier("replicaset-controller") Controller replicasetController) {
+        return args -> {
+            // Optionally wrap the controller-manager with {@link io.kubernetes.client.extended.leaderelection.LeaderElector}
+            // so that the controller works in HA setup.
+            // https://github.com/kubernetes-client/java/blob/master/examples/src/main/java/io/kubernetes/client/examples/LeaderElectionExample.java
+            ControllerManager controllerManager = new ControllerManager(
+                    sharedInformerFactory,
+                    replicasetController
+            );
+            // Starts the controller-manager in background.
+            Executors.newSingleThreadExecutor().submit(controllerManager);
+        };
     }
 
     @KubernetesInformers({

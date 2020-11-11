@@ -22,10 +22,12 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 @KubernetesReconciler(
-        value = "replicaset-reconciler",
         watches =
         @KubernetesReconcilerWatches({
                 @KubernetesReconcilerWatch(
@@ -42,26 +44,20 @@ public class ReplicaSetReconciler implements Reconciler {
 
     private final static Logger logger = LoggerFactory.getLogger(ReplicaSetReconciler.class);
 
-    private final Lister<V1Pod> podLister;
+    @Autowired
+    private Lister<V1Pod> podLister;
 
-    private final SharedInformer<V1Pod> podInformer;
+    @Autowired
+    private SharedInformer<V1Pod> podInformer;
 
-    private final Lister<V1ReplicaSet> rsLister;
+    @Autowired
+    private Lister<V1ReplicaSet> rsLister;
 
-    private final SharedInformer<V1ReplicaSet> rsInformer;
+    @Autowired
+    private SharedInformer<V1ReplicaSet> rsInformer;
 
-    private final CoreV1Api coreV1Api;
-
-    private final AppsV1Api appsV1Api;
-
-    public ReplicaSetReconciler(ApiClient apiClient, Lister<V1Pod> podLister, SharedInformer<V1Pod> podSharedInformer, Lister<V1ReplicaSet> rsLister, SharedInformer<V1ReplicaSet> rsSharedInformer) {
-        this.podLister = podLister;
-        this.podInformer = podSharedInformer;
-        this.rsLister = rsLister;
-        this.rsInformer = rsSharedInformer;
-        this.coreV1Api = new CoreV1Api(apiClient); // feel lucky? try {@link io.kubernetes.client.util.generic.GenericKubernetesApi}
-        this.appsV1Api = new AppsV1Api(apiClient);
-    }
+    @Autowired
+    private ApiClient apiClient;
 
 
     // the filter only applies for ADD event from pod.
@@ -97,6 +93,8 @@ public class ReplicaSetReconciler implements Reconciler {
     public Result reconcile(Request request) {
         logger.info("starting to reconcile replicaset {}", request);
 
+        CoreV1Api coreV1Api = new CoreV1Api(apiClient);
+        AppsV1Api appsV1Api = new AppsV1Api(apiClient);
         V1ReplicaSet rs = this.rsLister.namespace(request.getNamespace()).get(request.getName());
         if (rs == null) {
             logger.info("replicaset {} already deleted", request);
@@ -105,6 +103,7 @@ public class ReplicaSetReconciler implements Reconciler {
         List<V1Pod> allPods = this.podLister.namespace(request.getNamespace()).list();
         List<V1Pod> filteredPods = filterActivePods(allPods);
 
+        Executors.newSingleThreadExecutor().shutdown();
         LabelSelector labelSelector = LabelSelector.and(rs.getSpec().getSelector().getMatchLabels()
                 .entrySet()
                 .stream()
@@ -151,7 +150,7 @@ public class ReplicaSetReconciler implements Reconciler {
                 .spec(rs.getSpec())
                 .status(newStatus);
         try {
-            this.appsV1Api.replaceNamespacedReplicaSetStatus(
+            appsV1Api.replaceNamespacedReplicaSetStatus(
                     rs.getMetadata().getName(),
                     rs.getMetadata().getNamespace(),
                     copied,
